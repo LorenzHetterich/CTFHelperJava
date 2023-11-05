@@ -111,17 +111,9 @@ public class CTFdApi {
                         URLEncoder.encode(password, StandardCharsets.UTF_8),
                         URLEncoder.encode(submit, StandardCharsets.UTF_8),
                         URLEncoder.encode(nonce, StandardCharsets.UTF_8));
-                return simpleReq(HttpRequest.newBuilder().header("Content-Type", "application/x-www-form-urlencoded")
-                        .header("Accept",
-                                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-                        .header("Accept-Encoding", "gzip, deflate, br").header("Cache-Control", "max-age=0")
-                        .header("Origin", "https://demo.ctfd.io").header("Referer", "https://demo.ctfd.io/login")
-                        .header("Sec-Ch-Ua",
-                                "\"Chromium\";v=\"118\", \"Google Chrome\";v=\"118\", \"Not=A?Brand\";v=\"99\"")
-                        .header("Sec-Ch-Ua-Mobile", "?0").header("Sec-Ch-Ua-Platform", "\"Linux\"")
-                        .header("Sec-Fetch-Dest", "document").header("Sec-Fetch-Mode", "navigate")
-                        .header("Sec-Fetch-Site", "same-origin").header("Sec-Fetch-User", "?1")
-                        .header("Upgrade-Insecure-Requests", "1").uri(URI.create(String.format("%slogin", this.url))) //
+                return simpleReq(HttpRequest.newBuilder()
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .uri(URI.create(String.format("%s/login", this.url)))
                         .POST(BodyPublishers.ofString(body, StandardCharsets.UTF_8))).map(y -> {
                             return new CTFdApiResponse<Void>((Void) null);
                         });
