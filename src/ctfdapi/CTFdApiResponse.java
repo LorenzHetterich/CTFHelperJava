@@ -1,6 +1,7 @@
 package ctfdapi;
 
 import java.util.Optional;
+import java.util.function.Function;
 
 public class CTFdApiResponse<T> {
 
@@ -19,5 +20,22 @@ public class CTFdApiResponse<T> {
 		this.data = Optional.ofNullable(data);
 		this.exception = Optional.empty();
 	}
-	
+
+	public T get(){
+		if(success){
+			return data.orElseGet(() -> null);
+		}
+		if(exception.isPresent()) {
+			throw new RuntimeException("Api Request was not successfull", exception.get());
+		}
+		throw new RuntimeException("Api Request was not successfull");
+	}
+
+	public <D> CTFdApiResponse<D> map(Function<T, CTFdApiResponse<D>> func) {
+		try {
+			return func.apply(get());
+		} catch(Throwable t){
+			return new CTFdApiResponse<D>(t);
+		}
+	}
 }
