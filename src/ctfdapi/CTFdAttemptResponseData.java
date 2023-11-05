@@ -4,9 +4,9 @@ import com.google.gson.annotations.SerializedName;
 
 public class CTFdAttemptResponseData {
 
-	@SerializedName("message")
+    @SerializedName("message")
     public String message;
 
-	@SerializedName("status")
+    @SerializedName("status")
     public String status;
 }

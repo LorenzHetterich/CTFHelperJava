@@ -10,15 +10,16 @@ import com.google.gson.JsonParseException;
 import com.google.gson.annotations.JsonAdapter;
 
 @JsonAdapter(CTFdChallengeTypesResponseData.Adapter.class)
-public class CTFdChallengeTypesResponseData extends HashMap<String, CTFdChallenge.Type>{
+public class CTFdChallengeTypesResponseData extends HashMap<String, CTFdChallenge.Type> {
 
-    public static class Adapter implements JsonDeserializer<CTFdChallengeTypesResponseData>{
+    public static class Adapter implements JsonDeserializer<CTFdChallengeTypesResponseData> {
 
         @Override
-        public CTFdChallengeTypesResponseData deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+        public CTFdChallengeTypesResponseData deserialize(JsonElement json, Type typeOfT,
+                JsonDeserializationContext context) throws JsonParseException {
             CTFdChallengeTypesResponseData result = new CTFdChallengeTypesResponseData();
-            
-            for (Entry<String,JsonElement> entry : json.getAsJsonObject().entrySet()) {
+
+            for (Entry<String, JsonElement> entry : json.getAsJsonObject().entrySet()) {
                 result.put(entry.getKey(), context.deserialize(entry.getValue(), CTFdChallenge.Type.class));
             }
 
@@ -26,5 +27,5 @@ public class CTFdChallengeTypesResponseData extends HashMap<String, CTFdChalleng
         }
 
     }
-    
+
 }
