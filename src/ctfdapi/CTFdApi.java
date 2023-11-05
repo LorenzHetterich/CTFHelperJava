@@ -24,7 +24,7 @@ import com.google.gson.JsonParser;
 
 public class CTFdApi {
 
-    private final String url;
+    public final String url;
     private final Gson gson;
     private final HttpClient httpClient;
     private final Map<String, String> headers;
@@ -65,16 +65,14 @@ public class CTFdApi {
         this.headers.put("User-Agent", userAgent);
     }
 
-    private CTFdApiResponse<String> simpleReq(HttpRequest.Builder builder) {
-
+    public CTFdApiResponse<byte[]> simpleRawReq(HttpRequest.Builder builder) {
         // add headers
         for (Map.Entry<String, String> header : this.headers.entrySet()) {
             builder = builder.header(header.getKey(), header.getValue());
         }
 
         try {
-            HttpResponse<String> resp = this.httpClient.send(builder.build(),
-                    BodyHandlers.ofString(StandardCharsets.UTF_8));
+            HttpResponse<byte[]> resp = this.httpClient.send(builder.build(), BodyHandlers.ofByteArray());
 
             // set cookies
             Map<String, List<String>> headerMap = resp.headers().map();
@@ -90,11 +88,14 @@ public class CTFdApi {
                 System.out.println("new cookie: " + cookie);
             }
 
-            String html = resp.body();
-            return new CTFdApiResponse<String>(html);
+            return new CTFdApiResponse<byte[]>(resp.body());
         } catch (IOException | InterruptedException e) {
-            return new CTFdApiResponse<String>(e);
+            return new CTFdApiResponse<byte[]>(e);
         }
+    }
+
+    public CTFdApiResponse<String> simpleReq(HttpRequest.Builder builder) {
+        return this.simpleRawReq(builder).map(x -> new CTFdApiResponse<String>(new String(x, StandardCharsets.UTF_8)));        
     }
 
     public CTFdApiResponse<Void> defaultLogin(String username, String password) {
@@ -299,7 +300,6 @@ public class CTFdApi {
         return GET("/api/v1/challenges/types", Map.of(), CTFdChallengeTypesResponseData.class);
     }
 
-    @CTFdAdmin
     public CTFdApiResponse<CTFdChallenge> getChallenge(int challengeId) {
         return GET(String.format("/api/v1/challenges/%d", challengeId), Map.of(), CTFdChallenge.class);
     }

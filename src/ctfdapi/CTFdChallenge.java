@@ -136,4 +136,15 @@ public class CTFdChallenge {
     @SerializedName("solved_by_me")
     public boolean solvedByMe;
 
+    @SerializedName("files")
+    public String[] files;
+
+    @Override
+    public String toString() {
+        return "CTFdChallenge [id=" + id + ", name=" + name + ", description=" + description + ", connectionInfo="
+                + connectionInfo + ", nextId=" + nextId + ", maxAttempts=" + maxAttempts + ", value=" + value
+                + ", category=" + category + ", type=" + type + ", state=" + state + ", requirements=" + requirements
+                + ", solves=" + solves + ", solvedByMe=" + solvedByMe + "]";
+    }
+
 }
