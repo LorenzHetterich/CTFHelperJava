@@ -1,6 +1,8 @@
 package discord;
 
 import java.io.File;
+import java.net.URI;
+import java.net.http.HttpRequest;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -12,6 +14,7 @@ import java.util.regex.Pattern;
 import ctf.CTF;
 import ctf.CTFChallenge;
 import ctf.CTFFile;
+import ctf.ctfd.CTFdCTFAdapter;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.Channel;

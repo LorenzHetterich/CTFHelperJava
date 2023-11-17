@@ -11,6 +11,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,10 +47,33 @@ public class CTFdApi {
      * Utility-methods to make authentication, etc. work
      */
 
+    public void updateCSRFToken(){
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/challenges", this.url))).GET();
+        String x = this.simpleReq(builder).get();
+        
+        if(x.contains("'csrfNonce': \"")){
+            String nonce = x.split("'csrfNonce': \"")[1].split("\"")[0];
+            this.headers.put("Csrf-Token", nonce);
+        } else {
+            System.err.printf("Warning: no csrf token found!\n");
+        }
+    }
+
     public void addCookie(String name, String value) {
         HttpCookie cookie = new HttpCookie(name, value);
         cookie.setPath("/");
         cookie.setVersion(0);
+        
+        List<HttpCookie> toRemove = new ArrayList<>();
+        for(HttpCookie c : ((CookieManager) httpClient.cookieHandler().get()).getCookieStore().getCookies()){
+            if(c.getName().equals(name)){
+                toRemove.add(c);
+            }
+        }
+        for(HttpCookie c : toRemove){
+            ((CookieManager) httpClient.cookieHandler().get()).getCookieStore().remove(URI.create(this.url), c);
+        }
         ((CookieManager) httpClient.cookieHandler().get()).getCookieStore().add(URI.create(this.url), cookie);
     }
 
@@ -290,28 +314,10 @@ public class CTFdApi {
     }
 
     public CTFdApiResponse<CTFdAttemptResponseData> postChallengeAttempt(int challengeId, String submission) {
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(String.format("%s/challenges", this.url))).GET();
-        return this.simpleReq(builder).map(x -> {
-
-            String oldVal = this.headers.getOrDefault("Csrf-Token", null);
-            if(x.contains("'csrfNonce': \"")){
-                String nonce = x.split("'csrfNonce': \"")[1].split("\"")[0];
-                this.headers.put("Csrf-Token", nonce);
-            } else {
-                System.err.printf("Warning: no csrf token for flag submission!\n");
-            }
-
-            CTFdApiResponse<CTFdAttemptResponseData> resp = POST("/api/v1/challenges/attempt",
+        this.updateCSRFToken();
+        return  POST("/api/v1/challenges/attempt",
                 Map.of("challenge_id", Integer.toString(challengeId), "submission", submission),
                 CTFdAttemptResponseData.class);
-            
-            if(oldVal != null){
-                this.headers.put("Csrf-Token", oldVal);
-            }
-
-            return resp;
-        });
     }
 
     @CTFdAdmin

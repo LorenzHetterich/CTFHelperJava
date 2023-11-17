@@ -194,6 +194,7 @@ public class DiscordBot extends ListenerAdapter {
 
                 switch (event.getName()) {
                 case "ctfd-cookie": {
+                    
                     String cookies = event.getOption("cookies").getAsString();
                     for (String cookie : cookies.split(";")) {
                         if (!cookie.contains("=")) {
@@ -308,6 +309,7 @@ public class DiscordBot extends ListenerAdapter {
             }
             }
         } catch (Throwable t) {
+            t.printStackTrace();
             StringWriter sw = new StringWriter();
             PrintWriter pw = new PrintWriter(sw);
             t.printStackTrace(pw);
