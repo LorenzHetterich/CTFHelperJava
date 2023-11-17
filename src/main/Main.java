@@ -48,7 +48,7 @@ public class Main {
     }
 
     public static void main(String[] args) throws IOException{
-        new DiscordBot(Files.readString(Paths.get("token.txt")));
+        new DiscordBot(Files.readString(Paths.get("token.txt")).trim());
     }
 
 }
