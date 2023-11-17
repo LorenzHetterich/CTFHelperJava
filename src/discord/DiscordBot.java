@@ -50,11 +50,7 @@ public class DiscordBot extends ListenerAdapter {
         builder.enableIntents(GatewayIntent.MESSAGE_CONTENT);
         this.jda = builder.build();
         this.jda.updateCommands().addCommands(
-                Commands.slash("nuke", "nuke the current channel or category")
-                        .addOption(OptionType.BOOLEAN, "category", "nuke the whole category"),
-                Commands.slash("archive", "archive the current channel or category")
-                        .addOption(OptionType.BOOLEAN, "category", "archive the whole category"),
-                Commands.slash("ctfd", "creates a new CTFd CTF")
+                Commands.slash("ctfd-start", "creates a new CTFd CTF")
                         .addOption(OptionType.STRING, "name", "CTF category name", true)
                         .addOption(OptionType.STRING, "endpoint", "endpoint", true)
                         .addOption(OptionType.STRING, "cookies", "Cookies", false)
@@ -263,7 +259,7 @@ public class DiscordBot extends ListenerAdapter {
                 break;
             }
 
-            case "ctfd": {
+            case "ctfd-start": {
                 String name = event.getOption("name", null, OptionMapping::getAsString);
 
                 if (this.ctfs.containsKey(name)) {
@@ -312,98 +308,6 @@ public class DiscordBot extends ListenerAdapter {
                 this.ctfs.put(name, dctf);
                 break;
             }
-
-            case "nuke": {
-                if (event.getOption("category", false, OptionMapping::getAsBoolean)) {
-                    // nuke whole category
-                    Category category = findCategory(guild, channel);
-                    if (category == null) {
-                        action.editOriginal("This channel has no category!").queue();
-                        return;
-                    }
-                    action.editOriginal("if you insist").queue();
-                    category.delete().queueAfter(5, TimeUnit.SECONDS);
-                    category.getChannels().forEach(x -> x.delete().queueAfter(3, TimeUnit.SECONDS));
-                } else {
-                    // only nuke channel
-                    action.editOriginal("if you insist").queue();
-                    event.getChannel().delete().queueAfter(5, TimeUnit.SECONDS);
-                }
-                break;
-            }
-
-            case "archive": {
-                String path = ".";
-
-                // nice vulnerability for a ctf here: name a discord server with a guild id to
-                // conflict one with an invalid name ;)
-                // same for channels, etc. below
-                // also, this can probably be exploited with a bit of path traversal.
-                if (tryCreateDir(path + "/" + guild.getName())) {
-                    path += "/" + guild.getName();
-                } else if (tryCreateDir(path + "/" + guild.getId())) {
-                    path += "/" + guild.getId();
-                } else {
-                    action.editOriginal("Could not create guild directory").queue();
-                    return;
-                }
-
-                Category category = findCategory(guild, channel);
-
-                if (category != null) {
-                    if (tryCreateDir(path + "/" + category.getName())) {
-                        path += "/" + category.getName();
-                    } else if (tryCreateDir(path + "/" + category.getId())) {
-                        path += "/" + category.getId();
-                    } else {
-                        action.editOriginal("Could not create category directory").queue();
-                        return;
-                    }
-                }
-
-                String filePath;
-                if (event.getOption("category", false, OptionMapping::getAsBoolean)) {
-                    // who is this concurrency guy, I'd like to meet him one day
-                    // race condition, space condition
-                    int[] amountOkError = { 0, 0 };
-                    for (TextChannel c : category.getTextChannels()) {
-                        if (tryCreateFile(path + "/" + c.getName())) {
-                            filePath = path + "/" + c.getName();
-                        } else if (tryCreateFile(path + "/" + c.getId())) {
-                            filePath = path + "/" + c.getId();
-                        } else {
-                            action.editOriginal("Could not create file").queue();
-                            return;
-                        }
-                        saveMessageHistory(filePath, c.getIterableHistory(), (a, b) -> {
-                            amountOkError[b == null ? 0 : 1]++;
-                            action.editOriginal(String.format("%d ok / %d error", amountOkError[0], amountOkError[1]))
-                                    .queue();
-                            c.sendMessage(b == null ? "Saved this channel" : "Failed to save this channel").queue();
-                        });
-                    }
-
-                    return;
-                } else {
-                    if (tryCreateFile(path + "/" + channel.getName())) {
-                        filePath = path + "/" + channel.getName();
-                    } else if (tryCreateFile(path + "/" + channel.getId())) {
-                        filePath = path + "/" + channel.getId();
-                    } else {
-                        action.editOriginal("Could not create file").queue();
-                        return;
-                    }
-                    saveMessageHistory(filePath, channel.getIterableHistory(), (a, b) -> {
-                        if (b == null) {
-                            action.editOriginal("done").queue();
-                        } else {
-                            action.editOriginal("error").queue();
-                        }
-                    });
-                    return;
-                }
-            }
-
             }
         } catch (Throwable t) {
             StringWriter sw = new StringWriter();
