@@ -10,6 +10,8 @@ public interface CTFFile {
 
     public byte[] getContent();
 
+    public String getUrl();
+
     public default boolean download(String directory, String name) {
         try {
             Files.write(Paths.get(directory, name), getContent());

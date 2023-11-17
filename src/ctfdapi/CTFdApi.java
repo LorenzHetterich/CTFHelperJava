@@ -290,9 +290,28 @@ public class CTFdApi {
     }
 
     public CTFdApiResponse<CTFdAttemptResponseData> postChallengeAttempt(int challengeId, String submission) {
-        return POST("/api/v1/challenges/attempt",
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/challenges", this.url))).GET();
+        return this.simpleReq(builder).map(x -> {
+
+            String oldVal = this.headers.getOrDefault("Csrf-Token", null);
+            if(x.contains("'csrfNonce': \"")){
+                String nonce = x.split("'csrfNonce': \"")[1].split("\"")[0];
+                this.headers.put("Csrf-Token", nonce);
+            } else {
+                System.err.printf("Warning: no csrf token for flag submission!\n");
+            }
+
+            CTFdApiResponse<CTFdAttemptResponseData> resp = POST("/api/v1/challenges/attempt",
                 Map.of("challenge_id", Integer.toString(challengeId), "submission", submission),
                 CTFdAttemptResponseData.class);
+            
+            if(oldVal != null){
+                this.headers.put("Csrf-Token", oldVal);
+            }
+
+            return resp;
+        });
     }
 
     @CTFdAdmin

@@ -4,6 +4,9 @@ import java.util.List;
 
 public interface CTFChallenge {
 
+    // if no url is applicable, return empty string
+    public String getUrl();
+
     // if no name is applicable, return a unique identifier
     public String getName();
 

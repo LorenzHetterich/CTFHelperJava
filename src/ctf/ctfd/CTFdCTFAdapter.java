@@ -13,7 +13,7 @@ import ctfdapi.CTFdApi;
 public class CTFdCTFAdapter implements CTF {
 
     // keep accessible for subclasses
-    protected CTFdApi ctfd;
+    public CTFdApi ctfd;
     protected String flagRegex;
 
     public CTFdCTFAdapter(String endpoint, String flagRegex){
@@ -23,7 +23,7 @@ public class CTFdCTFAdapter implements CTF {
 
     @Override
     public boolean login(String username, String password) {
-        ctfd.defaultLogin(username, password);
+        ctfd.defaultLogin(username, password).get();
         return this.ctfd.simpleReq(HttpRequest.newBuilder().GET().uri(URI.create(this.ctfd.url))).get().contains("logout");
     }
 

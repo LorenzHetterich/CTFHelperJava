@@ -1,7 +1,9 @@
 package ctf.ctfd;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpRequest;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,6 +20,11 @@ public class CTFdChallengeAdapter implements CTFChallenge {
 
         public FileAdapter(String uri){
             this.uri = uri;
+        }
+
+        @Override
+        public String getUrl(){
+            return this.uri;
         }
 
         @Override
@@ -44,11 +51,13 @@ public class CTFdChallengeAdapter implements CTFChallenge {
     protected int solves;
     protected boolean isSolved;
     protected List<FileAdapter> files;
+    protected String url;
 
     public CTFdChallengeAdapter(CTFdApi ctfd, CTFdChallenge challenge){
         this.ctfd = ctfd;
         this.id = challenge.id;
         this.files = new ArrayList<>();
+        this.url = String.format("%s/challenges#%s-%d", ctfd.url, URLEncoder.encode(challenge.name, StandardCharsets.UTF_8).replace("+", "%20"), challenge.id);
         this.update(challenge);
     }
 
@@ -73,6 +82,11 @@ public class CTFdChallengeAdapter implements CTFChallenge {
                 this.files.add(new FileAdapter(String.format("%s/%s", ctfd.url, url)));
             }   
         }
+    }
+
+    @Override
+    public String getUrl(){
+        return this.url;
     }
 
     @Override
