@@ -315,7 +315,7 @@ public class DiscordBot extends ListenerAdapter {
             if (tStr.length() > 1500) {
                 tStr = tStr.substring(0, 1500);
             }
-            action.editOriginal("Exception: \n" + tStr);
+            action.editOriginal("Exception: \n" + tStr).queue();
         }
     }
 
