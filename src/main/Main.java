@@ -1,12 +1,16 @@
 package main;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import com.google.gson.Gson;
+
 import ctf.CTF;
 import ctf.CTFChallenge;
 import ctf.CTFFile;
-import discord.DiscordBot;
+import discord.NewDiscordBot;
+
 
 public class Main {
     
@@ -46,9 +50,18 @@ public class Main {
             }
         }
     }
+    
 
     public static void main(String[] args) throws IOException{
-        new DiscordBot(Files.readString(Paths.get("token.txt")).trim());
+        // new DiscordBot(Files.readString(Paths.get("token.txt")).trim());
+        String token = Files.readString(Paths.get("token.txt")).trim();
+        NewDiscordBot.State state;
+        if(new File("ctfs/all.json").exists()){
+            state = new Gson().fromJson(Files.readString(new File("ctfs/all.json").toPath()), NewDiscordBot.State.class);
+        } else {
+            state = new NewDiscordBot.State();
+        }
+        new NewDiscordBot(token, state);
     }
 
 }

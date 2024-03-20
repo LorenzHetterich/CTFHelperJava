@@ -25,6 +25,56 @@ import com.google.gson.JsonParser;
 
 public class CTFdApi {
 
+    @FunctionalInterface
+    public static interface AuthFunction {
+        void authenticate(CTFdAuth auth, CTFdApi api);
+    }
+
+    public static enum CTFdAuthType {
+        CREDENTIALS((auth, api) -> api.defaultLogin(auth.auth1, auth.auth2)),
+        COOKIE((auth, api) -> api.addCookie(auth.auth1, auth.auth2)),
+        AUTHENTICATION((auth, api) -> api.addHeader("Authorization", String.format("%s %s", auth.auth1, auth.auth2))),
+        NONE((auth, api) -> {});
+
+        public final AuthFunction authenticate;
+
+        CTFdAuthType(AuthFunction authenticate){
+            this.authenticate = authenticate;
+        }
+    }
+
+    public static class CTFdAuth {
+        public CTFdAuthType type;
+        public String auth1;
+        public String auth2;
+
+        public CTFdAuth(CTFdAuthType type, String auth1, String auth2){
+            this.type = type;
+            this.auth1 = auth1;
+            this.auth2 = auth2;
+        }
+
+        public static CTFdAuth Credentails(String username, String password) {
+            return new CTFdAuth(CTFdAuthType.CREDENTIALS, username, password);
+        }
+
+        public static CTFdAuth COOKIE(String name, String value){
+            return new CTFdAuth(CTFdAuthType.COOKIE, name, value);
+        }
+
+        public static CTFdAuth Authentication(String kind, String value){
+            return new CTFdAuth(CTFdAuthType.AUTHENTICATION, kind, value);
+        }
+
+        public static CTFdAuth None(){
+            return new CTFdAuth(CTFdAuthType.NONE, "", "");
+        }
+
+        public void authenticate(CTFdApi api){
+            this.type.authenticate.authenticate(this, api);
+        }
+    }
+
     public final String url;
     private final Gson gson;
     private final HttpClient httpClient;
@@ -34,7 +84,7 @@ public class CTFdApi {
         this.url = url;
         this.gson = new GsonBuilder().setPrettyPrinting().create();
         this.httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2)
-                .followRedirects(HttpClient.Redirect.NEVER).cookieHandler(new CookieManager()).build();
+                .followRedirects(HttpClient.Redirect.ALWAYS).cookieHandler(new CookieManager()).build();
         this.headers = new HashMap<>();
 
     }
@@ -56,6 +106,7 @@ public class CTFdApi {
             String nonce = x.split("'csrfNonce': \"")[1].split("\"")[0];
             this.headers.put("Csrf-Token", nonce);
         } else {
+            System.out.println(x);
             System.err.printf("Warning: no csrf token found!\n");
         }
     }
@@ -316,7 +367,7 @@ public class CTFdApi {
     public CTFdApiResponse<CTFdAttemptResponseData> postChallengeAttempt(int challengeId, String submission) {
         this.updateCSRFToken();
         return  POST("/api/v1/challenges/attempt",
-                Map.of("challenge_id", Integer.toString(challengeId), "submission", submission),
+                Map.of("challenge_id", challengeId, "submission", submission),
                 CTFdAttemptResponseData.class);
     }
 
