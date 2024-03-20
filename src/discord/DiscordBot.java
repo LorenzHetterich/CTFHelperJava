@@ -1,46 +1,74 @@
 package discord;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import ctf.ctfd.CTFdCTFAdapter;
+import java.util.Optional;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonIOException;
+
+import ctfdapi.CTFdApi;
+import ctfdapi.CTFdApi.CTFdAuth;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.Role;
-import net.dv8tion.jda.api.entities.channel.concrete.Category;
-import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
-import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.requests.GatewayIntent;
-import net.dv8tion.jda.api.requests.restaction.pagination.MessagePaginationAction;
 
-public class DiscordBot extends ListenerAdapter {
+public class DiscordBot  extends ListenerAdapter{
+    
+    public static class State {
 
-    protected final JDA jda;
-    protected Map<String, DiscordBotCTF> ctfs;
+        public static class CTF {
+            public String name;
+            public String jsonPath;
+            public String discordGuildId;
 
-    public DiscordBot(String token) {
-        this.ctfs = new HashMap<>();
+            public transient DiscordBotCTF instance;
+
+            public CTF(String name, String jsonPath, String discordGuildId, DiscordBotCTF instance){
+                this.name = name;
+                this.jsonPath = jsonPath;
+                this.discordGuildId = discordGuildId;
+                this.instance = instance;
+            }
+        }
+
+        public static class CTFList extends ArrayList<CTF>{}
+
+        public CTFList ctfs; 
+
+        public State() {
+            ctfs = new CTFList();
+        }
+
+        public boolean save(){
+            try{
+                Files.writeString(new File("ctfs/all.json").toPath(), new Gson().toJson(this), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                return true;
+            } catch(IOException e){
+                return false;
+            }
+        }
+
+    }
+
+    public State state;
+    public JDA jda;
+
+    public DiscordBot(String token, State state){
+        this.state = state;
+        
         JDABuilder builder = JDABuilder.createDefault(token);
         builder.setActivity(Activity.playing("CTF"));
         builder.disableIntents(GatewayIntent.GUILD_PRESENCES, GatewayIntent.GUILD_MESSAGE_TYPING);
@@ -48,277 +76,191 @@ public class DiscordBot extends ListenerAdapter {
         builder.enableIntents(GatewayIntent.MESSAGE_CONTENT);
         this.jda = builder.build();
         this.jda.updateCommands().addCommands(
-                Commands.slash("ctfd-start", "creates a new CTFd CTF")
+                Commands.slash("ctfd-add", "creates a new CTFd CTF")
                         .addOption(OptionType.STRING, "name", "CTF category name", true)
                         .addOption(OptionType.STRING, "endpoint", "endpoint", true)
-                        .addOption(OptionType.STRING, "cookies", "Cookies", false)
-                        .addOption(OptionType.STRING, "username", "username", false)
-                        .addOption(OptionType.STRING, "password", "password", false)
-                        .addOption(OptionType.STRING, "pattern", "flag pattern", false),
-                Commands.slash("ctfd-login", "re-login into ctfd")
-                        .addOption(OptionType.STRING, "username", "username", true)
-                        .addOption(OptionType.STRING, "password", "password", true),
-                Commands.slash("ctfd-cookie", "add cookie to ctfd").addOption(OptionType.STRING, "cookies", "cookies",
-                        true),
-                Commands.slash("ctfd-flag", "submit flag for current challenge")
+                        .addOption(OptionType.STRING, "pattern", "flag pattern", true),
+                Commands.slash("ctfd-cookie", "sets cookie authentication for the associated CTF")
+                        .addOption(OptionType.STRING, "name", "name of the cookie to set", true)
+                        .addOption(OptionType.STRING, "value", "session cookie", true),
+                Commands.slash("ctfd-flag", "manually submit flag for current challenge")
                         .addOption(OptionType.STRING, "flag", "flag", true),
-                Commands.slash("ctfd-challenge", "refresh current challenge"),
-                Commands.slash("ctfd-challenges", "refresh challenges"),
+                Commands.slash("ctfd-update", "refresh all challenges"),
+                Commands.slash("ctfd-url", "change CTFd endpoint")
+                        .addOption(OptionType.STRING, "endpoint", "CTFd endpoint", true),
                 Commands.slash("ctfd-archive", "archive all messages within ctf channels of this ctf"),
                 Commands.slash("ctfd-end", "nuke all channels associated with the CTF")).queue();
+
+        List<State.CTF> toRemove = new ArrayList<>();
+
+        for(State.CTF ctf : state.ctfs){
+            try {
+                ctf.instance = new DiscordBotCTF(this.jda, ctf.jsonPath, null);
+            } catch (JsonIOException | IOException e) {
+                toRemove.add(ctf);
+                System.err.printf("[DiscordBot][Error] Unable to load CTF from json file %s\n", ctf.jsonPath);
+            }
+        }
+        toRemove.forEach(state.ctfs::remove);
+
         this.jda.addEventListener(this);
     }
 
-    private boolean hasRole(Member member, Guild guild, String roleName) {
-        for (Role r : guild.getRolesByName(roleName, true)) {
-            if (member.canInteract(r)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private Category findCategory(Guild guild, MessageChannelUnion channel) {
-        for (Category c : guild.getCategories()) {
-            if (c.getChannels().stream().anyMatch(x -> x.getId().equals(channel.getId()))) {
-                return c;
-            }
-        }
-        return null;
-    }
-
-    public static void saveMessageHistory(String filepath, MessagePaginationAction action,
-            BiConsumer<? super Object, ? super Throwable> onDone) {
-        final List<Message> messages = new ArrayList<>();
-
-        try {
-            PrintStream out = new PrintStream(filepath);
-            action.forEachAsync(x -> {
-                messages.add(x);
-                return true;
-            }).thenAccept(_ignored -> {
-                Collections.reverse(messages);
-                for (Message m : messages) {
-                    out.printf("[%s][%s]: %s\n", m.getTimeCreated(), m.getAuthor().getEffectiveName(),
-                            m.getContentDisplay());
-                }
-            }).whenComplete(onDone.andThen((a, b) -> out.close()));
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
+    public void addCTF(DiscordBotCTF ctf){
+        state.ctfs.add(
+            new State.CTF(ctf.state.ctfName, ctf.jsonPath, jda.getCategoryById(ctf.state.generalCategory).getGuild().getId(), ctf)
+        );
+        ctf.state.save(ctf.jsonPath);
+        if(!this.state.save()){
+            System.err.printf("[ERROR][DiscordBot] Failed to save state\n");
         }
     }
 
-    public static boolean tryCreateDir(String path) {
-        File f = new File(path);
-        if (f.exists() && f.isDirectory()) {
+    public boolean createCTF(String name, String flagPattern, String endpoint, Guild guild){
+        // TODO: make this a safe file path
+        String jsonPath = String.format("ctfs/%s.json", name);
+        DiscordBotCTF.State state = new DiscordBotCTF.State(name, endpoint, flagPattern, CTFdAuth.None(), guild);
+        try{
+            DiscordBotCTF ctf = new DiscordBotCTF(jda, jsonPath, state);
+            ctf.update();
+            addCTF(ctf);
             return true;
-        }
-        return f.mkdir();
-    }
-
-    public static boolean tryCreateFile(String path) {
-        File f = new File(path);
-        if (f.exists() && f.isFile()) {
-            return true;
-        }
-        try {
-            return f.createNewFile();
-        } catch (IOException e) {
+        } catch(IOException e){
             return false;
         }
     }
 
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
-        if (!event.isFromGuild())
+        if (!event.isFromGuild()){
             return;
-        Category category = findCategory(event.getGuild(), event.getChannel());
-        if (category == null)
-            return;
-        int idx = category.getName().lastIndexOf("-");
-        String name = category.getName();
-        if (idx != -1) {
-            name = category.getName().substring(0, idx);
         }
+        Guild guild = event.getGuild();
+        Optional<State.CTF> ctf = state.ctfs.stream().filter(x -> jda.getCategoryById(x.instance.state.generalCategory).getGuild().getId().equals(guild.getId())).findAny();
 
-        DiscordBotCTF ctf = this.ctfs.getOrDefault(name, this.ctfs.getOrDefault(category.getName(), null));
-        if (ctf == null)
-            return;
-        ctf.onMessage(this, event);
+        if(ctf.isPresent()){
+            ctf.get().instance.onMessage(event);
+        }
     }
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        Member member = event.getMember();
-        Guild guild = event.getGuild();
-        MessageChannelUnion channel = event.getChannel();
-
-        InteractionHook action = event.reply("working . . .").complete();
-
-        if (!hasRole(member, guild, "CTF")) {
-            action.editOriginal("You don't have the CTF role, get r3al!").queue();
+        if(!event.isFromGuild()){
             return;
         }
+        Guild guild = event.getGuild();
+        Optional<State.CTF> ctf = state.ctfs.stream().filter(x -> jda.getCategoryById(x.instance.state.generalCategory).getGuild().getId().equals(guild.getId())).findAny();
 
-        try {
-            switch (event.getName()) {
+        InteractionHook hook = event.reply("...").complete();
 
-            case "ctfd-cookie":
-            case "ctfd-challenge":
-            case "ctfd-challenges":
-            case "ctfd-archive":
-            case "ctfd-end":
-            case "ctfd-flag":
-            case "ctfd-login": {
-                if (!event.isFromGuild()) {
-                    action.editOriginal("only works on servers in a ctf channel").queue();
+        switch(event.getName()){
+            case "ctfd-add": {
+                String name = event.getOption("name").getAsString();
+                String endpoint = event.getOption("endpoint").getAsString();
+                String pattern = event.getOption("pattern").getAsString();
+
+                if(ctf.isPresent()){
+                    hook.editOriginal("A CTF is already active on this server!").queue();
                     return;
                 }
 
-                Category category = findCategory(event.getGuild(), event.getChannel());
-                if (category == null) {
-                    action.editOriginal("no category found").queue();
-                    return;
-                }
-                int idx = category.getName().lastIndexOf("-");
-                String name = category.getName();
-                if (idx != -1) {
-                    name = category.getName().substring(0, idx);
+                if(createCTF(name, pattern, endpoint, guild)) {
+                    hook.editOriginal("Sucecss!").queue();
+                } else {
+                    hook.editOriginal("something went wrong, sorry :(").queue();
                 }
 
-                DiscordBotCTF ctf = this.ctfs.getOrDefault(name, this.ctfs.getOrDefault(category.getName(), null));
-                if (ctf == null) {
-                    action.editOriginal("Only works in CTF channel").queue();
-                    return;
-                }
-
-                switch (event.getName()) {
-                case "ctfd-cookie": {
-                    
-                    String cookies = event.getOption("cookies").getAsString();
-                    for (String cookie : cookies.split(";")) {
-                        if (!cookie.contains("=")) {
-                            continue;
-                        }
-                        String cookieName = cookie.split("=")[0].trim();
-                        String cookieValue = cookie.split("=")[1].trim();
-                        ((CTFdCTFAdapter)ctf.ctf).ctfd.addCookie(URLDecoder.decode(cookieName, StandardCharsets.UTF_8),
-                                URLDecoder.decode(cookieValue, StandardCharsets.UTF_8));
-                        System.out.printf("Added cookie: %s=%s\n", cookieName, cookieValue);
-                    }
-                    action.editOriginal("probably ok").queue();
-                    break;
-                }
-
-                case "ctfd-challenge": {
-                    if(ctf.refreshChallenge(channel.getId())){
-                        action.editOriginal("probably ok").queue();
-                    } else {
-                        action.editOriginal("probably challenge not found").queue();
-                    }
-                    break;
-                }
-                case "ctfd-challenges": {
-                    ctf.refreshChallenges();
-                    action.editOriginal("probably ok").queue();
-                    break;
-                }
-                case "ctfd-archive": {
-                    ctf.save();
-                    action.editOriginal("probably ok").queue();
-                    break;
-                }
-                case "ctfd-end": {
-                    ctf.save();
-                    ctf.destroy();
-                    break;
-                }
-                case "ctfd-flag": {
-                    if(ctf.submitFlag(channel.getId(), event.getOption("flag").getAsString())){
-                        action.editOriginal("probably ok").queue();
-                    } else {
-                        action.editOriginal("probably wrong flag or challenge not found").queue();
-                    }
-                    break;
-                }
-                case "ctfd-login": {
-                    if (ctf.ctf.login(event.getOption("username").getAsString(), event.getOption("password").getAsString())) {
-                        action.editOriginal("Probably ok").queue();
-                    } else {
-                        action.editOriginal("probably invalid username or password").queue();
-                    }
-                    break;
-                }
-
-                default: {
-                    action.editOriginal("WTF happened here?!").queue();
-                    break;
-                }
-                }
                 break;
             }
 
-            case "ctfd-start": {
-                String name = event.getOption("name", null, OptionMapping::getAsString);
+            case "ctfd-cookie": {
+                String name = event.getOption("name").getAsString();
+                String value = event.getOption("value").getAsString();
 
-                if (this.ctfs.containsKey(name)) {
-                    action.editOriginal("ctf with that name already started!").queue();
+                if(!ctf.isPresent()){
+                    hook.editOriginal("No ctf active on this server!").queue();
                     return;
                 }
 
-                String flagPattern = event.getOption("pattern", null, OptionMapping::getAsString);
-                String endpoint = event.getOption("endpoint", null, OptionMapping::getAsString);
-                String username = event.getOption("username", null, OptionMapping::getAsString);
-                String password = event.getOption("password", null, OptionMapping::getAsString);
-                String cookies = event.getOption("cookies", null, OptionMapping::getAsString);
+                ctf.get().instance.state.auth = CTFdAuth.COOKIE(name, value);
+                ctf.get().instance.update();
 
-                CTFdCTFAdapter ctf = new CTFdCTFAdapter(endpoint, flagPattern);
-                ctf.ctfd.setUserAgent(
-                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36");
-                if (cookies != null) {
-                    for (String cookie : cookies.split(";")) {
-                        if (!cookie.contains("=")) {
-                            continue;
-                        }
-                        String cookieName = cookie.split("=")[0].trim();
-                        String cookieValue = cookie.split("=")[1].trim();
-                        ctf.ctfd.addCookie(URLDecoder.decode(cookieName, StandardCharsets.UTF_8),
-                                URLDecoder.decode(cookieValue, StandardCharsets.UTF_8));
-                        System.out.printf("Added cookie: %s=%s\n", cookieName, cookieValue);
-                    }
-                }
+                hook.editOriginal("Done!").queue();
 
-                if (username != null && password != null) {
-                    // login with provided credentials
-                    if (!ctf.login(username, password)) {
-                        action.editOriginal("login failed!").queue();
-                        return;
-                    }
-                }
-
-                if (cookies == null && (username == null || password == null)) {
-                    action.editOriginal("either session cookie(s) or username + password must be provided").queue();
-                    return;
-                }
-
-                action.editOriginal("probably ok").queue();
-
-                DiscordBotCTF dctf = new DiscordBotCTF(guild, name, ctf);
-                this.ctfs.put(name, dctf);
                 break;
             }
+
+            case "ctfd-flag": {
+                if(!ctf.isPresent()){
+                    hook.editOriginal("No ctf active on this server!").queue();
+                    return;
+                }
+
+                Optional<DiscordBotCTF.State.Challenge> challenge = ctf.get().instance.state.challenges.find(event.getChannel());
+
+                if(!challenge.isPresent()){
+                    hook.editOriginal("No challenge associated with this channel!").queue();
+                    return;
+                }
+
+                if(challenge.get().tryFlag(event.getOption("flag").getAsString(), ctf.get().instance.api)) {
+                    challenge.get().flag = event.getOption("flag").getAsString();
+                    hook.editOriginal("Correct flag").queue();
+                    jda.getTextChannelById(ctf.get().instance.state.generalChannelId).sendMessage(
+                        String.format("Challenge %s was just solved by %s with flag %s\n", challenge.get().ctfdChallenge.name, event.getUser().getAsMention(), event.getOption("flag").getAsString())
+                    ).queue();
+                    ctf.get().instance.update();
+                } else {
+                    hook.editOriginal("Incorrect flag").queue();
+                }
+
+                break;
             }
-        } catch (Throwable t) {
-            t.printStackTrace();
-            StringWriter sw = new StringWriter();
-            PrintWriter pw = new PrintWriter(sw);
-            t.printStackTrace(pw);
-            String tStr = sw.toString();
-            if (tStr.length() > 1500) {
-                tStr = tStr.substring(0, 1500);
+
+            case "ctfd-update": {
+                if(!ctf.isPresent()){
+                    hook.editOriginal("No ctf active on this server!").queue();
+                    return;
+                }
+                ctf.get().instance.update();
+                hook.editOriginal("done").queue();
+                break;
             }
-            action.editOriginal("Exception: \n" + tStr).queue();
+
+            case "ctfd-archive": {
+                hook.editOriginal("TODO: implement ctfd-archive").queue();
+                break;
+            }
+
+            case "ctfd-end": {
+                if(!ctf.isPresent()){
+                    hook.editOriginal("no CTF associated with this server").queue();
+                    return;
+                }
+                ctf.get().instance.destroy();
+                state.ctfs.remove(ctf.get());
+                this.state.save();
+                new File(ctf.get().jsonPath).delete();
+                break;
+            }
+
+            case "ctfd-url": {
+                if(!ctf.isPresent()){
+                    hook.editOriginal("no CTF associated with this server").queue();
+                    return;
+                }
+                String endpoint = event.getOption("endpoint").getAsString();
+                ctf.get().instance.state.ctfUrl = endpoint;
+                ctf.get().instance.api = new CTFdApi(endpoint);
+                ctf.get().instance.update();
+                hook.editOriginal("done").queue();
+                break;
+            }
+
+            default: {
+                hook.editOriginal("unknown command").queue();
+                break;
+            }
         }
     }
-
 }
