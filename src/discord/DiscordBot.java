@@ -157,6 +157,7 @@ public class DiscordBot  extends ListenerAdapter{
         User user = event.getUser();
         Member member = event.getMember();
         if (member == null){
+            hook.editOriginal("Failed to get member who executed the command.").queue();
             return; //catch possible error if GUILD_MEMBERS is not enabled in bot or caching issues
         }
 
@@ -243,7 +244,7 @@ public class DiscordBot  extends ListenerAdapter{
                 boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
                 //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
                 if (!hasPermission) {
-                    event.reply("You do not have permission to use this command.").setEphemeral(true).queue();
+                    hook.editOriginal("You do not have permission to use this command.").queue();
                     return;
                 }
                 
@@ -261,7 +262,7 @@ public class DiscordBot  extends ListenerAdapter{
                 boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
                 //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
                 if (!hasPermission) {
-                    event.reply("You do not have permission to use this command.").setEphemeral(true).queue();
+                    hook.editOriginal("You do not have permission to use this command.").queue();
                     return;
                 }
   
