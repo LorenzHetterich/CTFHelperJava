@@ -159,7 +159,6 @@ public class DiscordBot  extends ListenerAdapter{
         if (member == null){
             return; //catch possible error if GUILD_MEMBERS is not enabled in bot or caching issues
         }
-        List<Role> roles = member.getRoles();
 
         switch(event.getName()){
             case "ctfd-add": {
