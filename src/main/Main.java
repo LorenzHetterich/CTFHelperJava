@@ -9,7 +9,7 @@ import com.google.gson.Gson;
 import ctf.CTF;
 import ctf.CTFChallenge;
 import ctf.CTFFile;
-import discord.NewDiscordBot;
+import discord.DiscordBot;
 
 
 public class Main {
@@ -53,15 +53,15 @@ public class Main {
     
 
     public static void main(String[] args) throws IOException{
-        // new DiscordBot(Files.readString(Paths.get("token.txt")).trim());
+        new File("ctfs").mkdir();
         String token = Files.readString(Paths.get("token.txt")).trim();
-        NewDiscordBot.State state;
+        DiscordBot.State state;
         if(new File("ctfs/all.json").exists()){
-            state = new Gson().fromJson(Files.readString(new File("ctfs/all.json").toPath()), NewDiscordBot.State.class);
+            state = new Gson().fromJson(Files.readString(new File("ctfs/all.json").toPath()), DiscordBot.State.class);
         } else {
-            state = new NewDiscordBot.State();
+            state = new DiscordBot.State();
         }
-        new NewDiscordBot(token, state);
+        new DiscordBot(token, state);
     }
 
 }

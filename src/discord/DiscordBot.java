@@ -89,7 +89,7 @@ public class DiscordBot  extends ListenerAdapter{
                 Commands.slash("ctfd-url", "change CTFd endpoint")
                         .addOption(OptionType.STRING, "endpoint", "CTFd endpoint", true),
                 Commands.slash("ctfd-archive", "archive all messages within ctf channels of this ctf"),
-                Commands.slash("ctfd-end", "nuke all channels associated with the CTF")).queue();
+                Commands.slash("ctfd-end", "Don't use before ctf is over! Otherwise I will personally visit you and wet all your socks.")).queue();
 
         List<State.CTF> toRemove = new ArrayList<>();
 
@@ -228,7 +228,12 @@ public class DiscordBot  extends ListenerAdapter{
             }
 
             case "ctfd-archive": {
-                hook.editOriginal("TODO: implement ctfd-archive").queue();
+                if(!ctf.isPresent()){
+                    hook.editOriginal("No ctf active on this server!").queue();
+                    return;
+                }
+                ctf.get().instance.archive();
+                hook.editOriginal("done").queue();
                 break;
             }
 
@@ -237,10 +242,13 @@ public class DiscordBot  extends ListenerAdapter{
                     hook.editOriginal("no CTF associated with this server").queue();
                     return;
                 }
+  
                 ctf.get().instance.destroy();
                 state.ctfs.remove(ctf.get());
                 this.state.save();
                 new File(ctf.get().jsonPath).delete();
+                hook.editOriginal("done").queue();
+                
                 break;
             }
 

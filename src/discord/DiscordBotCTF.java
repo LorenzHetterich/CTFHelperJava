@@ -1,13 +1,21 @@
 package discord;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
@@ -31,6 +39,35 @@ import net.dv8tion.jda.api.entities.emoji.Emoji;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 public class DiscordBotCTF {
+
+    public static final Map<String, String> category_symbols = new HashMap<>();
+
+    static {
+        // web
+        category_symbols.put("web", "🌐");
+
+        // crypto
+        category_symbols.put("crypto", "🔐");
+        category_symbols.put("cryptography", "🔐");
+
+        // rev
+        category_symbols.put("rev", "⭯");
+        category_symbols.put("reversing", "⭯");
+        category_symbols.put("reverse engineering", "⭯");
+
+        // pwn
+        category_symbols.put("pwn", "🎆");
+        category_symbols.put("exploitation", "🎆");
+        category_symbols.put("binary exploitation", "🎆");
+
+
+        // forensics
+        category_symbols.put("forensics", "🔎");
+
+        // misc
+        category_symbols.put("misc", "❓");
+        category_symbols.put("other", "❓");
+    }
 
     private static String toChannelName(String s) {
         StringBuilder result = new StringBuilder();
@@ -57,12 +94,16 @@ public class DiscordBotCTF {
             public Challenge(CTFdChallenge ctfdChallenge, String url, State state, JDA jda, CTFdApi api){
                 this.url = url;
                 this.ctfdChallenge = ctfdChallenge;
-                TextChannel textChannel = jda.getCategoryById(ctfdChallenge.solvedByMe ? state.solvedCategory : state.unsolvedCategory).createTextChannel(toChannelName(ctfdChallenge.name)).complete();
+                String name = toChannelName(ctfdChallenge.name);
+                if(category_symbols.containsKey(ctfdChallenge.category.toLowerCase())){
+                    name = category_symbols.get(ctfdChallenge.category.toLowerCase()) + "-" + name;
+                }
+                TextChannel textChannel = jda.getCategoryById(ctfdChallenge.solvedByMe ? state.solvedCategory : state.unsolvedCategory).createTextChannel(name).complete();
                 this.discordChannelId = textChannel.getId();
                 attachFiles(textChannel.sendMessage(getMessageContent(true)).complete(), api);
                 this.discordMessageId = jda.getTextChannelById(ctfdChallenge.solvedByMe ? state.solvedChallengesChannelId : state.unsolvedChallengesChannelId).sendMessage(
                     this.getMessageContent(false)
-                ).complete().getId();   
+                ).complete().getId(); 
             }
 
             public String getMessageContent(boolean full){
@@ -188,11 +229,10 @@ public class DiscordBotCTF {
             Category general = guild.createCategory(this.ctfName).complete();
 
             this.generalCategory = general.getId();
-            this.unsolvedCategory = guild.createCategory(this.ctfName + "-unsolved").complete().getId();
-            this.solvedCategory = guild.createCategory(this.ctfName + "-solved").complete().getId();
-
-            this.solvedChallengesChannelId = general.createTextChannel("solved").complete().getId();
-            this.unsolvedChallengesChannelId = general.createTextChannel("unsolved").complete().getId();
+            this.unsolvedCategory = guild.createCategory(this.ctfName + "-⏳").complete().getId();
+            this.solvedCategory = guild.createCategory(this.ctfName + "-🚩").complete().getId();
+            this.solvedChallengesChannelId = general.createTextChannel("🚩-solved").complete().getId();
+            this.unsolvedChallengesChannelId = general.createTextChannel("⏳-unsolved").complete().getId();
             this.generalChannelId = general.createTextChannel("general").complete().getId();
         }
 
@@ -292,10 +332,37 @@ public class DiscordBotCTF {
                     System.err.printf("[ERROR][DiscordCTF] Failed to save state to %s\n", jsonPath);
                 }
             }
+
+            this.sortChallenges();
             return true;
         } catch(RuntimeException e){
             jda.getTextChannelById(state.generalChannelId).sendMessage("Unable to update challenges, make sure authentication is valid!").queue();
             return false;
+        }
+    }
+
+    private void sortChallenges(){
+        
+        // solved challenges
+        List<TextChannel> sortedChannels = this.state.challenges
+            .stream()
+            .filter(x -> x.ctfdChallenge.solvedByMe)
+            .map(x -> jda.getTextChannelById(x.discordChannelId))
+            .sorted((a,b) -> a.getName().compareTo(b.getName()))
+            .toList();
+        for(int i = 0; i < sortedChannels.size(); i++){
+            sortedChannels.get(i).getManager().setPosition(i).complete();
+        }
+
+        // unsolved challenges
+        sortedChannels = this.state.challenges
+            .stream()
+            .filter(x -> !x.ctfdChallenge.solvedByMe)
+            .map(x -> jda.getTextChannelById(x.discordChannelId))
+            .sorted((a,b) -> a.getName().compareTo(b.getName()))
+            .toList();
+        for(int i = 0; i < sortedChannels.size(); i++){
+            sortedChannels.get(i).getManager().setPosition(i).complete();
         }
     }
 
@@ -329,5 +396,44 @@ public class DiscordBotCTF {
 
             }
         }).start();
+    }
+
+    private void trySaveChannel(Path dir, TextChannel channel, String name){
+        try {
+            PrintStream out = new PrintStream(dir.resolve(toChannelName(name) + ".log").toFile());
+            List<Message> messages = new ArrayList<>();
+            channel.getIterableHistory().forEachAsync(x -> {
+                messages.add(x);
+                return true;
+            }).thenAccept(_ignored -> {
+                Collections.reverse(messages);
+                for (Message m : messages) {
+                    out.printf("[%s][%s]: %s\n", m.getTimeCreated(), m.getAuthor().getEffectiveName(),
+                            m.getContentDisplay());
+                }
+            }).whenComplete((a,b) -> {
+                System.out.printf("Saved channel for %s\n", name);
+                out.close();
+                channel.sendMessage("Saved sucessfully!").queue();
+            });
+        } catch (FileNotFoundException e) {
+            System.err.println("Failed to save state for " + name);
+            channel.sendMessage("Failed to save!").queue();
+        }
+    }
+
+    public void archive() {
+
+        Path dir = Paths.get("archives", toChannelName(this.state.ctfName));
+
+        dir.toFile().mkdirs();
+
+        trySaveChannel(dir, this.jda.getTextChannelById(this.state.generalChannelId), "general");
+
+        for(Challenge c : this.state.challenges){
+            TextChannel channel = this.jda.getTextChannelById(c.discordChannelId);
+            trySaveChannel(dir, channel, c.ctfdChallenge.name);
+        }
+
     }
 }
