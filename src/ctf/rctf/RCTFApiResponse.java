@@ -1,21 +1,21 @@
-package ctfdapi;
+package ctf.rctf;
 
 import java.util.Optional;
 import java.util.function.Function;
 
-public class CTFdApiResponse<T> {
+public class RCTFApiResponse<T> {
 
 	public final boolean success;
 	public final Optional<Throwable> exception;
 	public final Optional<T> data;
 
-	public CTFdApiResponse(Throwable exception) {
+	public RCTFApiResponse(Throwable exception) {
 		this.exception = Optional.ofNullable(exception);
 		this.data = Optional.empty();
 		this.success = false;
 	}
 
-	public CTFdApiResponse(T data) {
+	public RCTFApiResponse(T data) {
 		this.success = true;
 		this.data = Optional.ofNullable(data);
 		this.exception = Optional.empty();
@@ -31,11 +31,11 @@ public class CTFdApiResponse<T> {
 		throw new RuntimeException("Api Request was not successfull");
 	}
 
-	public <D> CTFdApiResponse<D> map(Function<T, CTFdApiResponse<D>> func) {
+	public <D> RCTFApiResponse<D> map(Function<T, RCTFApiResponse<D>> func) {
 		try {
 			return func.apply(get());
 		} catch (Throwable t) {
-			return new CTFdApiResponse<D>(t);
+			return new RCTFApiResponse<D>(t);
 		}
 	}
 }

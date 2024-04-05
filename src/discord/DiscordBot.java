@@ -1,18 +1,14 @@
 package discord;
 
-import java.util.List;
+import java.util.HashMap;
 import java.util.Optional;
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonIOException;
 
-import ctfdapi.CTFdApi;
-import ctfdapi.CTFdApi.CTFdAuth;
+import java.util.Map;
+
+import ctf.ctfd.CTFdApi;
+import ctf.rctf.RCTFApi;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
@@ -26,110 +22,81 @@ import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.requests.GatewayIntent;
+import java.io.File;
+import java.nio.file.Files;
 
-public class DiscordBot  extends ListenerAdapter{
+public class DiscordBot extends ListenerAdapter{
+
+    // there are some race conditions in this class, but they should only lead to Exceptions which the DiscordAPI thingy handles nicely
+
+    public static JDA jda;
+
+    private Gson gson = new Gson();
     
-    public static class State {
+    // mapping Discord servers to CTFs
+    private Map<String, DiscordBotCTF> ctfs = new HashMap<>();
 
-        public static class CTF {
-            public String name;
-            public String jsonPath;
-            public String discordGuildId;
-
-            public transient DiscordBotCTF instance;
-
-            public CTF(String name, String jsonPath, String discordGuildId, DiscordBotCTF instance){
-                this.name = name;
-                this.jsonPath = jsonPath;
-                this.discordGuildId = discordGuildId;
-                this.instance = instance;
-            }
-        }
-
-        public static class CTFList extends ArrayList<CTF>{}
-
-        public CTFList ctfs; 
-
-        public State() {
-            ctfs = new CTFList();
-        }
-
-        public boolean save(){
-            try{
-                Files.writeString(new File("ctfs/all.json").toPath(), new Gson().toJson(this), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                return true;
-            } catch(IOException e){
-                return false;
-            }
-        }
-
-    }
-
-    public State state;
-    public JDA jda;
-
-    public DiscordBot(String token, State state){
-        this.state = state;
-        
+    public DiscordBot(String token){
+        // setup discord api thingy
         JDABuilder builder = JDABuilder.createDefault(token);
         builder.setActivity(Activity.playing("CTF"));
         builder.disableIntents(GatewayIntent.GUILD_PRESENCES, GatewayIntent.GUILD_MESSAGE_TYPING);
         builder.setLargeThreshold(30);
         builder.enableIntents(GatewayIntent.MESSAGE_CONTENT);
-        this.jda = builder.build();
-        this.jda.updateCommands().addCommands(
-                Commands.slash("ctfd-add", "creates a new CTFd CTF")
-                        .addOption(OptionType.STRING, "name", "CTF category name", true)
-                        .addOption(OptionType.STRING, "endpoint", "endpoint", true)
-                        .addOption(OptionType.STRING, "pattern", "flag pattern", true),
-                Commands.slash("ctfd-cookie", "sets cookie authentication for the associated CTF")
-                        .addOption(OptionType.STRING, "name", "name of the cookie to set", true)
-                        .addOption(OptionType.STRING, "value", "session cookie", true),
-                Commands.slash("ctfd-flag", "manually submit flag for current challenge")
-                        .addOption(OptionType.STRING, "flag", "flag", true),
-                Commands.slash("ctfd-update", "refresh all challenges"),
-                Commands.slash("ctfd-url", "change CTFd endpoint")
-                        .addOption(OptionType.STRING, "endpoint", "CTFd endpoint", true),
-                Commands.slash("ctfd-archive", "archive all messages within ctf channels of this ctf"),
-                Commands.slash("ctfd-end", "Don't use before ctf is over! Otherwise I will personally visit you and wet all your socks.")).queue();
+        jda = builder.build();
+        jda.updateCommands().addCommands(
 
-        List<State.CTF> toRemove = new ArrayList<>();
+        /* rctf specific */
+        Commands.slash("rctf-add", "creates a new rCTF CTF")
+        .addOption(OptionType.STRING, "name", "CTF name", true)
+        .addOption(OptionType.STRING, "endpoint", "endpoint", true),
 
-        for(State.CTF ctf : state.ctfs){
-            try {
-                ctf.instance = new DiscordBotCTF(this.jda, ctf.jsonPath, null);
-            } catch (JsonIOException | IOException e) {
-                toRemove.add(ctf);
-                System.err.printf("[DiscordBot][Error] Unable to load CTF from json file %s\n", ctf.jsonPath);
+        /* ctfd specific */
+        Commands.slash("ctfd-add", "creates a new CTFd CTF")
+                .addOption(OptionType.STRING, "name", "CTF name", true)
+                .addOption(OptionType.STRING, "endpoint", "endpoint", true),
+        
+        /* generic */
+        Commands.slash("ctf-pattern", "sets the flag pattern")
+            .addOption(OptionType.STRING, "pattern", "regex to set", true),
+        Commands.slash("ctf-header", "sets a header for the associated CTF")
+            .addOption(OptionType.STRING, "name", "header name", true)
+            .addOption(OptionType.STRING, "value", "header value", true),
+        Commands.slash("ctf-cookie", "sets a cookie for the associated CTF")
+        .addOption(OptionType.STRING, "name", "cookie name", true)
+        .addOption(OptionType.STRING, "value", "cookie value", true),
+        Commands.slash("ctf-flag", "manually submit flag for current challenge")
+                .addOption(OptionType.STRING, "flag", "flag", true),
+        Commands.slash("ctf-update", "refresh all challenges"),
+        Commands.slash("ctf-archive", "archive all messages within ctf channels of this ctf"),
+        Commands.slash("ctf-end", "Don't use before ctf is over! Otherwise I will personally visit you and wet all your socks.")).queue();
+
+        try {
+            jda.awaitReady();
+        } catch (InterruptedException e) {
+            // whatever
+            throw new RuntimeException("DO NOT INTERRUPT MEEEE!");
+        }
+
+         // load currently ongoing ctfs        
+         for(File f : new File("ctfs").listFiles()) {
+            try{
+                DiscordBotCTF ctf = gson.fromJson(Files.readString(f.toPath()), DiscordBotCTF.class);
+                ctf.gson = gson;
+                ctf.update();
+                ctfs.put(
+                    f.getName().split(".json")[0], 
+                    ctf
+                );
+                System.out.printf("Loaded CTF from file %s\n", f.getName());
+            } catch(Exception e){
+                e.printStackTrace();
+                System.err.printf("Failed to load CTF from file %s\n", f.getName());
             }
         }
-        toRemove.forEach(state.ctfs::remove);
 
-        this.jda.addEventListener(this);
-    }
-
-    public void addCTF(DiscordBotCTF ctf){
-        state.ctfs.add(
-            new State.CTF(ctf.state.ctfName, ctf.jsonPath, jda.getCategoryById(ctf.state.generalCategory).getGuild().getId(), ctf)
-        );
-        ctf.state.save(ctf.jsonPath);
-        if(!this.state.save()){
-            System.err.printf("[ERROR][DiscordBot] Failed to save state\n");
-        }
-    }
-
-    public boolean createCTF(String name, String flagPattern, String endpoint, Guild guild){
-        // TODO: make this a safe file path
-        String jsonPath = String.format("ctfs/%s.json", name);
-        DiscordBotCTF.State state = new DiscordBotCTF.State(name, endpoint, flagPattern, CTFdAuth.None(), guild);
-        try{
-            DiscordBotCTF ctf = new DiscordBotCTF(jda, jsonPath, state);
-            ctf.update();
-            addCTF(ctf);
-            return true;
-        } catch(IOException e){
-            return false;
-        }
+        // add event listener in the end to not race anything above
+        jda.addEventListener(this);
     }
 
     @Override
@@ -138,10 +105,8 @@ public class DiscordBot  extends ListenerAdapter{
             return;
         }
         Guild guild = event.getGuild();
-        Optional<State.CTF> ctf = state.ctfs.stream().filter(x -> jda.getCategoryById(x.instance.state.generalCategory).getGuild().getId().equals(guild.getId())).findAny();
-
-        if(ctf.isPresent()){
-            ctf.get().instance.onMessage(event);
+        if(this.ctfs.containsKey(guild.getId())) {
+            this.ctfs.get(guild.getId()).onMessage(event);
         }
     }
 
@@ -151,8 +116,8 @@ public class DiscordBot  extends ListenerAdapter{
             return;
         }
         Guild guild = event.getGuild();
-        Optional<State.CTF> ctf = state.ctfs.stream().filter(x -> jda.getCategoryById(x.instance.state.generalCategory).getGuild().getId().equals(guild.getId())).findAny();      
         InteractionHook hook = event.reply("...").complete();
+        Optional<DiscordBotCTF> ctf = Optional.ofNullable(this.ctfs.getOrDefault(guild.getId(), null));      
 
         User user = event.getUser();
         Member member = event.getMember();
@@ -162,100 +127,133 @@ public class DiscordBot  extends ListenerAdapter{
         }
 
         switch(event.getName()){
-            case "ctfd-add": {
-                String name = event.getOption("name").getAsString();
-                String endpoint = event.getOption("endpoint").getAsString();
-                String pattern = event.getOption("pattern").getAsString();
 
+
+            case "ctfd-add": {
                 if(ctf.isPresent()){
-                    hook.editOriginal("A CTF is already active on this server!").queue();
+                    hook.editOriginal("a CTF is already active on this server. You must end it first!").queue();
                     return;
                 }
 
-                if(createCTF(name, pattern, endpoint, guild)) {
-                    hook.editOriginal("Sucecss!").queue();
-                } else {
-                    hook.editOriginal("something went wrong, sorry :(").queue();
+                String endpoint = event.getOption("endpoint").getAsString();
+                String name = event.getOption("name").getAsString();
+                CTFdApi api = new CTFdApi(endpoint);
+                
+                try{
+                    DiscordBotCTF newCtf = new DiscordBotCTF(String.format("ctfs/%s.json", guild.getId()), name, api, guild);
+                    newCtf.update();
+                    this.ctfs.put(guild.getId(), newCtf);
+                    hook.editOriginal("done!").queue();
+                } catch(Exception e){
+                    hook.editOriginal("something went wrong!").queue();
                 }
-
                 break;
             }
 
-            case "ctfd-cookie": {
+            case "rctf-add": {
+                if(ctf.isPresent()){
+                    hook.editOriginal("a CTF is already active on this server. You must end it first!").queue();
+                    return;
+                }
+
+                String endpoint = event.getOption("endpoint").getAsString();
+                String name = event.getOption("name").getAsString();
+                RCTFApi api = new RCTFApi(endpoint);
+                
+                try{
+                    DiscordBotCTF newCtf = new DiscordBotCTF(String.format("ctfs/%s.json", guild.getId()), name, api, guild);
+                    newCtf.update();
+                    this.ctfs.put(guild.getId(), newCtf);
+                    hook.editOriginal("done!").queue();
+                } catch(Exception e){
+                    hook.editOriginal("something went wrong!").queue();
+                }
+                break;
+            }
+
+            case "ctf-pattern": {
+                if(!ctf.isPresent()){
+                    hook.editOriginal("ctf-pattern requires an ongoing CTF on the server!").queue();
+                    return;
+                }
+
+                String pattern = event.getOption("pattern").getAsString();
+                ctf.get().setFlagPattern(pattern);
+                hook.editOriginal("done").queue();
+                break;
+            }
+
+            case "ctf-cookie": {
+                if(!ctf.isPresent()){
+                    hook.editOriginal("ctf-cookie requires an ongoing CTF on the server!").queue();
+                    return;
+                }
+
                 String name = event.getOption("name").getAsString();
                 String value = event.getOption("value").getAsString();
 
-                if(!ctf.isPresent()){
-                    hook.editOriginal("No ctf active on this server!").queue();
-                    return;
+                try {
+                    ctf.get().setCookie(name, value);
+                    hook.editOriginal("done!").queue();
+                } catch(Exception e){
+                    e.printStackTrace();
+                    hook.editOriginal("something went wrong!").queue();
                 }
-
-                ctf.get().instance.state.auth = CTFdAuth.COOKIE(name, value);
-                ctf.get().instance.update();
-
-                hook.editOriginal("Done!").queue();
-
                 break;
             }
 
-            case "ctfd-flag": {
+            case "ctf-header": {
                 if(!ctf.isPresent()){
-                    hook.editOriginal("No ctf active on this server!").queue();
+                    hook.editOriginal("ctf-header requires an ongoing CTF on the server!").queue();
                     return;
                 }
 
-                Optional<DiscordBotCTF.State.Challenge> challenge = ctf.get().instance.state.challenges.find(event.getChannel());
+                String name = event.getOption("name").getAsString();
+                String value = event.getOption("value").getAsString();
 
-                if(!challenge.isPresent()){
-                    hook.editOriginal("No challenge associated with this channel!").queue();
-                    return;
+                try {
+                    ctf.get().setHeader(name, value);
+                    hook.editOriginal("done!").queue();
+                } catch(Exception e){
+                    e.printStackTrace();
+                    hook.editOriginal("something went wrong!").queue();
                 }
-
-                if(challenge.get().tryFlag(event.getOption("flag").getAsString(), ctf.get().instance.api)) {
-                    challenge.get().flag = event.getOption("flag").getAsString();
-                    hook.editOriginal("Correct flag").queue();
-                    jda.getTextChannelById(ctf.get().instance.state.generalChannelId).sendMessage(
-                        String.format("Challenge %s was just solved by %s with flag %s\n", challenge.get().ctfdChallenge.name, event.getUser().getAsMention(), event.getOption("flag").getAsString())
-                    ).queue();
-                    ctf.get().instance.update();
-                } else {
-                    hook.editOriginal("Incorrect flag").queue();
-                }
-
                 break;
             }
 
-            case "ctfd-update": {
+            case "ctf-flag": {
                 if(!ctf.isPresent()){
-                    hook.editOriginal("No ctf active on this server!").queue();
+                    hook.editOriginal("ctf-flag requires an ongoing CTF on the server!").queue();
                     return;
                 }
-                ctf.get().instance.update();
-                hook.editOriginal("done").queue();
+
+                String flag = event.getOption("flag").getAsString();
+
+                try {
+                    ctf.get().submitFlag(event.getChannelId(), flag, hook);
+                } catch(Exception e){
+                    hook.editOriginal("something went wrong!").queue();
+                }
                 break;
             }
 
-            case "ctfd-archive": {
+            case "ctf-update": {
                 if(!ctf.isPresent()){
-                    hook.editOriginal("No ctf active on this server!").queue();
+                    hook.editOriginal("ctf-update requires an ongoing CTF on the server!").queue();
                     return;
                 }
-                
-                boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
-                //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
-                if (!hasPermission) {
-                    hook.editOriginal("You do not have permission to use this command.").queue();
-                    return;
+
+                try {
+                    ctf.get().update(hook);
+                } catch(Exception e){
+                    hook.editOriginal("something went wrong!").queue();
                 }
-                
-                ctf.get().instance.archive();
-                hook.editOriginal("done").queue();
                 break;
             }
 
-            case "ctfd-end": {
+            case "ctf-archive": {
                 if(!ctf.isPresent()){
-                    hook.editOriginal("no CTF associated with this server").queue();
+                    hook.editOriginal("ctf-archive requires an ongoing CTF on the server!").queue();
                     return;
                 }
 
@@ -266,30 +264,42 @@ public class DiscordBot  extends ListenerAdapter{
                     return;
                 }
   
-                ctf.get().instance.destroy();
-                state.ctfs.remove(ctf.get());
-                this.state.save();
-                new File(ctf.get().jsonPath).delete();
-                hook.editOriginal("done").queue();
                 
+                try {
+                    ctf.get().archive(hook);
+                } catch(Exception e){
+                    hook.editOriginal("something went wrong!").queue();
+                }
+
                 break;
             }
 
-            case "ctfd-url": {
+            case "ctf-end": {
+                boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
+                //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
+                if (!hasPermission) {
+                    hook.editOriginal("You do not have permission to use this command.").queue();
+                    return;
+                }  
+                
+              
                 if(!ctf.isPresent()){
-                    hook.editOriginal("no CTF associated with this server").queue();
+                    hook.editOriginal("ctf-end requires an ongoing CTF on the server!").queue();
                     return;
                 }
-                String endpoint = event.getOption("endpoint").getAsString();
-                ctf.get().instance.state.ctfUrl = endpoint;
-                ctf.get().instance.api = new CTFdApi(endpoint);
-                ctf.get().instance.update();
-                hook.editOriginal("done").queue();
+
+                // TODO: require role!
+
+                try {
+                    this.ctfs.remove(guild.getId()).end(hook);
+                } catch(Exception e){
+                    hook.editOriginal("something went wrong!").queue();
+                }
                 break;
             }
 
             default: {
-                hook.editOriginal("unknown command").queue();
+                hook.editOriginal(String.format("Unknown command '%s'", event.getName())).queue();
                 break;
             }
         }
