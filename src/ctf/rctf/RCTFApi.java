@@ -18,7 +18,6 @@ import com.google.gson.JsonObject;
 
 import ctf.CTFApi;
 import ctf.CTFChallenge;
-import utils.SerializableTypes.StringMap;
 
 import static utils.SerializableTypes.StringMap;
 
