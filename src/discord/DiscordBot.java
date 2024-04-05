@@ -13,6 +13,8 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -115,9 +117,18 @@ public class DiscordBot extends ListenerAdapter{
         }
         Guild guild = event.getGuild();
         InteractionHook hook = event.reply("...").complete();
-        Optional<DiscordBotCTF> ctf = Optional.ofNullable(this.ctfs.getOrDefault(guild.getId(), null));
+        Optional<DiscordBotCTF> ctf = Optional.ofNullable(this.ctfs.getOrDefault(guild.getId(), null));      
 
-        switch(event.getName()) {
+        User user = event.getUser();
+        Member member = event.getMember();
+        if (member == null){
+            hook.editOriginal("Failed to get member who executed the command.").queue();
+            return; //catch possible error if GUILD_MEMBERS is not enabled in bot or caching issues
+        }
+
+        switch(event.getName()){
+
+
             case "ctfd-add": {
                 if(ctf.isPresent()){
                     hook.editOriginal("a CTF is already active on this server. You must end it first!").queue();
@@ -246,15 +257,32 @@ public class DiscordBot extends ListenerAdapter{
                     return;
                 }
 
+                boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
+                //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
+                if (!hasPermission) {
+                    hook.editOriginal("You do not have permission to use this command.").queue();
+                    return;
+                }
+  
+                
                 try {
                     ctf.get().archive(hook);
                 } catch(Exception e){
                     hook.editOriginal("something went wrong!").queue();
                 }
+
                 break;
             }
 
             case "ctf-end": {
+                boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
+                //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
+                if (!hasPermission) {
+                    hook.editOriginal("You do not have permission to use this command.").queue();
+                    return;
+                }  
+                
+              
                 if(!ctf.isPresent()){
                     hook.editOriginal("ctf-end requires an ongoing CTF on the server!").queue();
                     return;
@@ -275,5 +303,17 @@ public class DiscordBot extends ListenerAdapter{
                 break;
             }
         }
+    }
+
+    // Checks if the member has a role with the given name
+    private boolean checkForPermissionbyRole(Member member, String roleName) {
+        return member.getRoles().stream()
+                     .anyMatch(role -> role.getName().equalsIgnoreCase(roleName));
+    }
+    
+    // Checks if the member has a role with the given ID, JDA handles roleID as String
+    private boolean checkForPermissionbyID(Member member, String roleId) {
+        return member.getRoles().stream()
+                     .anyMatch(role -> role.getId().equals(roleId));
     }
 }
