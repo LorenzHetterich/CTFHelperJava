@@ -29,7 +29,7 @@ public class RCTFApi extends CTFApi {
     public StringMap headers = new StringMap();
 
     // non-serializable stuff
-    private transient Gson gson = new Gson();
+    private transient Gson g = new Gson();
     private transient HttpClient cl;
 
     public RCTFApi(String endpoint){
@@ -45,6 +45,13 @@ public class RCTFApi extends CTFApi {
             cl = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(HttpClient.Redirect.ALWAYS).build();
         }
         return cl;
+    }
+
+    private Gson getGson(){
+        if(g == null){
+            g = new Gson();
+        }
+        return g;
     }
 
     private static String buildUri(String base, String path, Map<String, String> parameters) {
@@ -114,7 +121,7 @@ public class RCTFApi extends CTFApi {
         // build partial POST request and fire it
         return this.doApiRequest(
                 HttpRequest.newBuilder().uri(URI.create(fullUrl)).header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(body), StandardCharsets.UTF_8)));
+                        .POST(HttpRequest.BodyPublishers.ofString(getGson().toJson(body), StandardCharsets.UTF_8)));
     }
 
     @Override

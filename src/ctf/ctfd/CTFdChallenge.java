@@ -121,6 +121,6 @@ public class CTFdChallenge extends CTFChallenge{
 
     @Override
     public String getUrl(){
-        return  String.format("%s/challenges#%s-%d", api.endpoint, URLEncoder.encode(this.name, StandardCharsets.UTF_8), this.id);
+        return  String.format("%s/challenges#%s-%s", api.endpoint, URLEncoder.encode(this.name, StandardCharsets.UTF_8), this.id);
     }
 }
