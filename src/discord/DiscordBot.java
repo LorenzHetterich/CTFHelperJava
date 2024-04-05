@@ -255,7 +255,7 @@ public class DiscordBot extends ListenerAdapter{
                     return;
                 }
 
-                boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
+                boolean hasPermissionWithName = checkForPermissionbyRole(member, "admin");
                 //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
                 if (!hasPermissionWithName) {
                     hook.editOriginal("You do not have permission to use this command.").queue();
@@ -273,7 +273,7 @@ public class DiscordBot extends ListenerAdapter{
             }
 
             case "ctf-end": {
-                boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
+                boolean hasPermissionWithName = checkForPermissionbyRole(member, "admin");
                 //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
                 if (!hasPermissionWithName) {
                     hook.editOriginal("You do not have permission to use this command.").queue();
