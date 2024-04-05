@@ -119,7 +119,6 @@ public class DiscordBot extends ListenerAdapter{
         InteractionHook hook = event.reply("...").complete();
         Optional<DiscordBotCTF> ctf = Optional.ofNullable(this.ctfs.getOrDefault(guild.getId(), null));      
 
-        User user = event.getUser();
         Member member = event.getMember();
         if (member == null){
             hook.editOriginal("Failed to get member who executed the command.").queue();
@@ -259,7 +258,7 @@ public class DiscordBot extends ListenerAdapter{
 
                 boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
                 //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
-                if (!hasPermission) {
+                if (!hasPermissionWithName) {
                     hook.editOriginal("You do not have permission to use this command.").queue();
                     return;
                 }
@@ -277,7 +276,7 @@ public class DiscordBot extends ListenerAdapter{
             case "ctf-end": {
                 boolean hasPermissionWithName = checkForPermissionbyRole(member, "Admin");
                 //or boolean hasPermissionWithId = checkForPermissionbyID(member, AdminID);
-                if (!hasPermission) {
+                if (!hasPermissionWithName) {
                     hook.editOriginal("You do not have permission to use this command.").queue();
                     return;
                 }  
@@ -309,11 +308,5 @@ public class DiscordBot extends ListenerAdapter{
     private boolean checkForPermissionbyRole(Member member, String roleName) {
         return member.getRoles().stream()
                      .anyMatch(role -> role.getName().equalsIgnoreCase(roleName));
-    }
-    
-    // Checks if the member has a role with the given ID, JDA handles roleID as String
-    private boolean checkForPermissionbyID(Member member, String roleId) {
-        return member.getRoles().stream()
-                     .anyMatch(role -> role.getId().equals(roleId));
     }
 }
