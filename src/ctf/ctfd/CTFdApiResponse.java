@@ -1,4 +1,4 @@
-package ctfdapi;
+package ctf.ctfd;
 
 import java.util.Optional;
 import java.util.function.Function;
