@@ -9,7 +9,7 @@ import java.util.List;
 @JsonAdapter(AbstractClassSerializer.class)
 public abstract class CTFChallenge extends AbstractSerializable implements CTFApiPart {
 
-    public abstract int getId();
+    public abstract String getId();
     public abstract String getName();
     public abstract String getCategory();
     public abstract String getDescription();

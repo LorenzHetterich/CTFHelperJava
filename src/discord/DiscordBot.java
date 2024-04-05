@@ -8,6 +8,7 @@ import com.google.gson.Gson;
 import java.util.Map;
 
 import ctf.ctfd.CTFdApi;
+import ctf.rctf.RCTFApi;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
@@ -43,7 +44,10 @@ public class DiscordBot extends ListenerAdapter{
         jda = builder.build();
         jda.updateCommands().addCommands(
 
-        // TODO: rCTF 
+        /* rctf specific */
+        Commands.slash("rctf-add", "creates a new rCTF CTF")
+        .addOption(OptionType.STRING, "name", "CTF name", true)
+        .addOption(OptionType.STRING, "endpoint", "endpoint", true),
 
         /* ctfd specific */
         Commands.slash("ctfd-add", "creates a new CTFd CTF")
@@ -53,9 +57,12 @@ public class DiscordBot extends ListenerAdapter{
         /* generic */
         Commands.slash("ctf-pattern", "sets the flag pattern")
             .addOption(OptionType.STRING, "pattern", "regex to set", true),
-        Commands.slash("ctf-cookie", "sets cookie authentication for the associated CTF")
-        .addOption(OptionType.STRING, "name", "name of the cookie to set", true)
-        .addOption(OptionType.STRING, "value", "session cookie", true),
+        Commands.slash("ctf-header", "sets a header for the associated CTF")
+            .addOption(OptionType.STRING, "name", "header name", true)
+            .addOption(OptionType.STRING, "value", "header value", true),
+        Commands.slash("ctf-cookie", "sets a cookie for the associated CTF")
+        .addOption(OptionType.STRING, "name", "cookie name", true)
+        .addOption(OptionType.STRING, "value", "cookie value", true),
         Commands.slash("ctf-flag", "manually submit flag for current challenge")
                 .addOption(OptionType.STRING, "flag", "flag", true),
         Commands.slash("ctf-update", "refresh all challenges"),
@@ -132,6 +139,27 @@ public class DiscordBot extends ListenerAdapter{
                 break;
             }
 
+            case "rctf-add": {
+                if(ctf.isPresent()){
+                    hook.editOriginal("a CTF is already active on this server. You must end it first!").queue();
+                    return;
+                }
+
+                String endpoint = event.getOption("endpoint").getAsString();
+                String name = event.getOption("name").getAsString();
+                RCTFApi api = new RCTFApi(endpoint);
+                
+                try{
+                    DiscordBotCTF newCtf = new DiscordBotCTF(String.format("ctfs/%s.json", guild.getId()), name, api, guild);
+                    newCtf.update();
+                    this.ctfs.put(guild.getId(), newCtf);
+                    hook.editOriginal("done!").queue();
+                } catch(Exception e){
+                    hook.editOriginal("something went wrong!").queue();
+                }
+                break;
+            }
+
             case "ctf-pattern": {
                 if(!ctf.isPresent()){
                     hook.editOriginal("ctf-pattern requires an ongoing CTF on the server!").queue();
@@ -155,6 +183,25 @@ public class DiscordBot extends ListenerAdapter{
 
                 try {
                     ctf.get().setCookie(name, value);
+                    hook.editOriginal("done!").queue();
+                } catch(Exception e){
+                    e.printStackTrace();
+                    hook.editOriginal("something went wrong!").queue();
+                }
+                break;
+            }
+
+            case "ctf-header": {
+                if(!ctf.isPresent()){
+                    hook.editOriginal("ctf-header requires an ongoing CTF on the server!").queue();
+                    return;
+                }
+
+                String name = event.getOption("name").getAsString();
+                String value = event.getOption("value").getAsString();
+
+                try {
+                    ctf.get().setHeader(name, value);
                     hook.editOriginal("done!").queue();
                 } catch(Exception e){
                     e.printStackTrace();

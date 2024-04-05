@@ -4,6 +4,7 @@ import ctf.CTFApi;
 import ctf.CTFChallenge;
 import ctf.ctfd.CTFdApi;
 import ctf.ctfd.CTFdChallenge;
+import ctf.rctf.RCTFApi;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
@@ -168,7 +169,7 @@ public class DiscordBotCTF {
     public static class ChallengeList extends ArrayList<Challenge> {
 
         public Optional<Challenge> find(CTFChallenge challenge){
-            return this.stream().filter(x -> x.challenge.getId() == challenge.getId()).findAny();
+            return this.stream().filter(x -> x.challenge.getId().equals(challenge.getId())).findAny();
         }
 
         public Optional<Challenge> find(MessageChannelUnion channel){
@@ -255,7 +256,10 @@ public class DiscordBotCTF {
         try {
             this.challenges.forEach(x -> x.challenge.setApi(api));
             boolean needsSave = api.getChallenges().stream().map(c -> {
-                c = api.getChallenge(c.getId());
+                if(api instanceof CTFdApi){
+                    // getChallenges() is good enough for rCTF to get all details (kinda)
+                    c = api.getChallenge(c.getId());
+                }
                 c.setApi(api);
                 Optional<Challenge> challenge = challenges.find(c);
                 if(challenge.isPresent()){
@@ -315,7 +319,17 @@ public class DiscordBotCTF {
             ctfd.setCookie(name, value);
             this.update();
         } else {
-            // TODO rCTF
+            throw new IllegalStateException(String.format("%s implementation does not support cookies", this.api.getClass().getName()));
+        }
+        this.save();
+    }
+
+    public void setHeader(String name, String value){
+        if(this.api instanceof RCTFApi rctf){
+            rctf.setHeader(name, value);
+            this.update();
+        } else {
+            // TODO CTFd
             throw new IllegalStateException(String.format("%s implementation does not support cookies", this.api.getClass().getName()));
         }
         this.save();

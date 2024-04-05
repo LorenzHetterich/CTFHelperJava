@@ -154,20 +154,20 @@ public class CTFdApi extends CTFApi{
     }
 
     @Override
-    public List<Integer> getChallengeIds() {
-        return GET("/api/v1/challenges", Map.of()).get().getAsJsonArray().asList().stream().map(x -> x.getAsJsonObject().get("id").getAsInt()).toList();
+    public List<String> getChallengeIds() {
+        return GET("/api/v1/challenges", Map.of()).get().getAsJsonArray().asList().stream().map(x -> x.getAsJsonObject().get("id").getAsInt() + "").toList();
     }
 
     @Override
-    public CTFChallenge getChallenge(int id) {
-        return new CTFdChallenge(this, id, GET(String.format("/api/v1/challenges/%d", id), Map.of()).get().getAsJsonObject());
+    public CTFChallenge getChallenge(String id) {
+        return new CTFdChallenge(this, id, GET(String.format("/api/v1/challenges/%s", id), Map.of()).get().getAsJsonObject());
     }
     
     // overwrite if there is a more efficient way to do this with less requests!
     @Override
     public List<CTFChallenge> getChallenges() {
         return GET("/api/v1/challenges", Map.of()).get().getAsJsonArray().asList().stream().map(x -> {
-            int id = x.getAsJsonObject().get("id").getAsInt();
+            String id = x.getAsJsonObject().get("id").getAsInt() + "";
             return (CTFChallenge) new CTFdChallenge(this, id, x.getAsJsonObject());
         }).toList();
     }

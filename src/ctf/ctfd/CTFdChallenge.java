@@ -13,7 +13,7 @@ import utils.SerializableTypes.StringList;
 
 public class CTFdChallenge extends CTFChallenge{
     
-    public int id;
+    public String id;
     private String name, category, description;
     private Boolean solved;
     private StringList files;
@@ -21,7 +21,7 @@ public class CTFdChallenge extends CTFChallenge{
     private transient CTFdApi api;
     
 
-    public CTFdChallenge(CTFdApi api, int id, JsonObject json){
+    public CTFdChallenge(CTFdApi api, String id, JsonObject json){
         this.api = api;
         this.id = id;
         this.updateFrom(json);
@@ -29,7 +29,7 @@ public class CTFdChallenge extends CTFChallenge{
 
     private void updateFrom(JsonObject json){
         if(json.has("id")){
-            if(json.get("id").getAsInt() != this.id){
+            if(!(json.get("id").getAsInt() + "").equals(this.id)){
                 throw new IllegalStateException("Challenge Id Changed! This is fatal!");
             }
         }
@@ -61,7 +61,7 @@ public class CTFdChallenge extends CTFChallenge{
     }
 
     @Override
-    public int getId() {
+    public String getId() {
         return id;
     }
 
