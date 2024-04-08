@@ -53,7 +53,7 @@ For this example, we use the demo hosted at `https://demo.ctfd.io/`:
 
 `/ctfd-add ctfd-demo https://demo.ctfd.io`
 
-Not that we exclude the trailing `/`. 
+Note that we exclude the trailing `/`. 
 This is important.
 The discord bot should create something similar to this:
 ![](img/demo1.png)
