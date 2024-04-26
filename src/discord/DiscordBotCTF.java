@@ -315,6 +315,9 @@ public class DiscordBotCTF {
         if(this.api instanceof CTFdApi ctfd){
             ctfd.setCookie(name, value);
             this.update();
+        } else if(this.api instanceof RCTFApi rctf){
+            rctf.setCookie(name, value);
+            this.update();
         } else {
             throw new IllegalStateException(String.format("%s implementation does not support cookies", this.api.getClass().getName()));
         }

@@ -39,6 +39,10 @@ public class RCTFApi extends CTFApi {
         headers.put(name, value);
     }
 
+    public void setCookie(String name, String value){
+        this.cookies.put(name, value);
+    }
+
     private HttpClient getClient(){
         if(cl == null){
             cl = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(HttpClient.Redirect.ALWAYS).build();
